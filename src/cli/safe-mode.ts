@@ -1,5 +1,6 @@
 import type { CliContext } from "./context.ts";
 import { composeMessage } from "./compose-actions.ts";
+import type { MarkdownInputOptions } from "../slack/markdown-input.ts";
 
 const TRUTHY_VALUES = new Set(["1", "true", "yes", "on"]);
 
@@ -36,13 +37,12 @@ export type SendOptionsForRedirect = {
   schedule?: string;
   scheduleIn?: string;
   unfurl?: boolean;
-  markdown?: boolean;
-};
+} & MarkdownInputOptions;
 
 /**
  * Redirects `message send` to the interactive draft editor so a human
  * reviews and sends the message. Flags the draft editor cannot represent
- * (attachments, raw blocks, scheduling, broadcasts, Markdown) are rejected instead
+ * (attachments, raw blocks, scheduling, broadcasts) are rejected instead
  * of being silently dropped.
  */
 export async function redirectSendToDraft(
@@ -70,9 +70,6 @@ export async function redirectSendToDraft(
   if (input.options.replyBroadcast) {
     unsupported.push("--reply-broadcast");
   }
-  if (input.options.markdown) {
-    unsupported.push("--markdown");
-  }
   if (unsupported.length > 0) {
     throw new Error(
       `Safe mode is active: "message send" is redirected to the draft editor, which does not support ${unsupported.join(", ")}. Drop those flags or disable safe mode.`,
@@ -96,6 +93,8 @@ export async function redirectSendToDraft(
       workspace: input.options.workspace,
       threadTs: input.options.threadTs,
       unfurl: input.options.unfurl,
+      markdown: input.options.markdown,
+      cjkSpacing: input.options.cjkSpacing,
     },
   });
   return { safe_mode: true, redirected_from: "send", ...payload };

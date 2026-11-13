@@ -961,11 +961,13 @@
     <script>
       // ─── Config ───
       const CONFIG = __DRAFT_CONFIG__;
+      const DIALECT = CONFIG.markdown ? "markdown" : "mrkdwn";
       const IS_MAC = /Mac|iPhone/.test(navigator.platform);
       const MOD = IS_MAC ? "metaKey" : "ctrlKey";
 
       // ─── Init header ───
       document.getElementById("channelName").textContent = CONFIG.channelName;
+      document.getElementById("sourceToggle").textContent = CONFIG.markdown ? "Markdown" : "mrkdwn";
       if (CONFIG.workspaceName) {
         document.getElementById("workspaceName").textContent = CONFIG.workspaceName;
       }
@@ -1024,7 +1026,7 @@
 
       // ─── Init editor content ───
       if (CONFIG.initialText) {
-        editor.innerHTML = mrkdwnToHtml(CONFIG.initialText);
+        editor.innerHTML = sourceToHtml(CONFIG.initialText, DIALECT);
         requestAnimationFrame(() => updateSendBtn());
       }
 
@@ -1269,7 +1271,7 @@
       // Code block management: the browser splits <pre> on Enter, creating adjacent
       // <pre> elements. We let this happen and handle it via:
       // 1. CSS: adjacent pres look like one block (no gaps/borders between them)
-      // 2. Serialization: htmlToMrkdwn treats adjacent pres as one code block
+      // 2. Serialization: htmlToSource treats adjacent pres as one code block
       // 3. Escape: when user creates an empty pre after another empty pre, exit code
 
       // Track code block escape (double-Enter on empty line)
@@ -1516,14 +1518,14 @@
         sourceMode = !sourceMode;
         document.getElementById("sourceToggle").classList.toggle("active", sourceMode);
         if (sourceMode) {
-          sourceEditor.value = htmlToMrkdwn(editor);
+          sourceEditor.value = htmlToSource(editor, DIALECT);
           editor.style.display = "none";
           sourceEditor.style.display = "block";
           document.getElementById("toolbar").style.display = "none";
           document.getElementById("aaToggle").style.display = "none";
           sourceEditor.focus();
         } else {
-          editor.innerHTML = mrkdwnToHtml(sourceEditor.value);
+          editor.innerHTML = sourceToHtml(sourceEditor.value, DIALECT);
           sourceEditor.style.display = "none";
           editor.style.display = "";
           document.getElementById("toolbar").style.display = toolbarVisible ? "" : "none";
@@ -1548,7 +1550,7 @@
         if (sending) {
           return;
         }
-        const text = sourceMode ? sourceEditor.value.trim() : htmlToMrkdwn(editor);
+        const text = sourceMode ? sourceEditor.value.trim() : htmlToSource(editor, DIALECT);
         if (!text) {
           editor.focus();
           return;

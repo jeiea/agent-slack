@@ -207,7 +207,7 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
     .option("--no-unfurl", "Suppress link and media previews. Cannot be combined with --attach.")
     .option(
       "--markdown",
-      `${MARKDOWN_OPTION_HELP} With --attach, the text becomes the comment. Cannot be combined with --blocks; rejected in safe mode.`,
+      `${MARKDOWN_OPTION_HELP} With --attach, the text becomes the comment. Cannot be combined with --blocks.`,
     )
     .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
@@ -287,7 +287,10 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
       "Open a send-capable rich editor in the browser; CI skips the editor and immediately sends supplied text",
     )
     .argument("<target>", "Slack message URL, #name/name, or channel id")
-    .argument("[text]", "Initial message text (mrkdwn; sent immediately when CI skips the editor)")
+    .argument(
+      "[text]",
+      "Initial message text (mrkdwn, or standard Markdown with --markdown; sent immediately when CI skips the editor)",
+    )
     .option(
       "--workspace <url>",
       "Workspace selector (full URL or unique substring; needed when using #channel/channel id across multiple workspaces)",
@@ -297,11 +300,13 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
       "Thread root ts to post into; overrides the URL-derived thread when supplied",
     )
     .option("--no-unfurl", "Suppress link and media previews")
+    .option("--markdown", `${MARKDOWN_OPTION_HELP} The editor reads and writes this syntax.`)
+    .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
       const [targetInput, text, options] = args as [
         string,
         string | undefined,
-        { workspace?: string; threadTs?: string; unfurl?: boolean },
+        { workspace?: string; threadTs?: string; unfurl?: boolean } & MarkdownInputOptions,
       ];
       try {
         const payload = await composeMessage({

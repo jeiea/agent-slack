@@ -3,14 +3,58 @@
 // imports or exports; tests evaluate it against a DOM implementation.
 /* eslint-disable no-unused-vars -- the editor script calls these after inlining */
 
-// ─── mrkdwn to HTML (initial content) ───
-function mrkdwnToHtml(text) {
+/**
+ * Source syntax per dialect: Slack mrkdwn, or standard Markdown that Slack
+ * converts from `markdown_text`. Constructs the editor has no element for
+ * (tables, headings) stay as text in either dialect.
+ */
+const DIALECTS = {
+  mrkdwn: {
+    bold: "*",
+    italic: "_",
+    strike: "~",
+    bullet: "•",
+    link: (href, text) => `<${href}|${text}>`,
+    // \x00 marks a code placeholder; a URL holding one is left as text.
+    linkPattern: /<(https?:\/\/[^|>\x00]+)(?:\|([^>]+))?>/g,
+    readLink: (url, label) => [url, label],
+    emphasis: [
+      [/\*([^*]+)\*/g, "<b>$1</b>"],
+      [/(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g, "<i>$1</i>"],
+      [/~([^~]+)~/g, "<s>$1</s>"],
+    ],
+    escapeText: false,
+  },
+  markdown: {
+    bold: "**",
+    italic: "_",
+    strike: "~~",
+    bullet: "-",
+    link: (href, text) => `[${text}](${href})`,
+    // Destinations may hold one level of balanced parentheses, as in Wikipedia URLs.
+    linkPattern: /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)(?:[^()\s\x00]|\([^()\s\x00]*\))+)\)/g,
+    readLink: (label, url) => [url, label],
+    emphasis: [
+      [/\*\*((?:[^*]|\*(?!\*))+)\*\*|__((?:[^_]|_(?!_))+)__/g, "<b>$1$2</b>"],
+      [/\*([^*]+)\*|(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g, "<i>$1$2</i>"],
+      [/~~([^~]+)~~/g, "<s>$1</s>"],
+    ],
+    // Slack tokens such as `<@U123>` must show as text, not parse as tags.
+    escapeText: true,
+  },
+};
+
+// ─── Source text to HTML (initial content, leaving source mode) ───
+function sourceToHtml(text, dialectName) {
   if (!text) {
     return "";
   }
+  const dialect = DIALECTS[dialectName];
+  const fmtInline = (t) => formatInline(t, dialect);
   const codeBlocks = [];
-  text = text.replace(/```([\s\S]*?)```/g, (_, code) => {
-    codeBlocks.push(`<pre>${escapeHtml(code.trim())}</pre>`);
+  text = text.replace(/```(?:([^\s`]+)\n)?([\s\S]*?)```/g, (_, lang, code) => {
+    const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
+    codeBlocks.push(`<pre${langAttr}>${escapeHtml(code.trim())}</pre>`);
     return `\x00CB${codeBlocks.length - 1}\x00`;
   });
   const inlineCodes = [];
@@ -63,21 +107,9 @@ function mrkdwnToHtml(text) {
   return html.replace(/(<br>)+$/, "");
 }
 
-function escapeHtml(t) {
-  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function fmtInline(t) {
-  t = t.replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/g, '<a href="$1" target="_blank">$2</a>');
-  t = t.replace(/<(https?:\/\/[^>]+)>/g, '<a href="$1" target="_blank">$1</a>');
-  t = t.replace(/\*([^*]+)\*/g, "<b>$1</b>");
-  t = t.replace(/(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])/g, "<i>$1</i>");
-  t = t.replace(/~([^~]+)~/g, "<s>$1</s>");
-  return t;
-}
-
-// ─── HTML to mrkdwn (submission) ───
-function htmlToMrkdwn(root) {
+// ─── HTML to source text (submission, entering source mode) ───
+function htmlToSource(root, dialectName) {
+  const dialect = DIALECTS[dialectName];
   const visited = new Set();
   function walk(node) {
     if (visited.has(node)) {
@@ -95,26 +127,22 @@ function htmlToMrkdwn(root) {
     switch (tag) {
       case "b":
       case "strong":
-        return wrapMarker(kids(), "*");
+        return wrapMarker(kids(), dialect.bold);
       case "i":
       case "em":
-        return wrapMarker(kids(), "_");
+        return wrapMarker(kids(), dialect.italic);
       case "s":
       case "strike":
       case "del":
-        return wrapMarker(kids(), "~");
+        return wrapMarker(kids(), dialect.strike);
       case "code":
         return `\`${el.textContent || ""}\``;
       case "pre": {
-        // Collect adjacent pres into one code block
-        const lines = [(el.textContent || "").trimEnd()];
-        let next = el.nextElementSibling;
-        while (next && next.tagName === "PRE") {
-          lines.push((next.textContent || "").trimEnd());
-          visited.add(next);
-          next = next.nextElementSibling;
-        }
-        return `\`\`\`\n${lines.filter((l) => l).join("\n")}\n\`\`\`\n`;
+        const pres = adjacentPres(el);
+        pres.forEach((pre) => visited.add(pre));
+        const lines = pres.map((pre) => (pre.textContent || "").trimEnd()).filter((l) => l);
+        const lang = el.getAttribute("data-lang") || "";
+        return `\`\`\`${lang}\n${lines.join("\n")}\n\`\`\`\n`;
       }
       case "blockquote": {
         const c = kids().trim();
@@ -126,7 +154,7 @@ function htmlToMrkdwn(root) {
       case "ul": {
         let r = "";
         for (const li of listItems(el)) {
-          r += `• ${walk(li).trim()}\n`;
+          r += `${dialect.bullet} ${walk(li).trim()}\n`;
         }
         return r;
       }
@@ -144,7 +172,7 @@ function htmlToMrkdwn(root) {
       case "a": {
         const h = el.getAttribute("href");
         const t = kids();
-        return h && t && h !== t ? `<${h}|${t}>` : h || t;
+        return h && t && h !== t ? dialect.link(h, t) : h || t;
       }
       case "br":
         return "\n";
@@ -161,13 +189,13 @@ function htmlToMrkdwn(root) {
         const st = el.style;
         let c = kids();
         if (st.fontWeight === "bold" || Number(st.fontWeight) >= 700) {
-          c = wrapMarker(c, "*");
+          c = wrapMarker(c, dialect.bold);
         }
         if (st.fontStyle === "italic") {
-          c = wrapMarker(c, "_");
+          c = wrapMarker(c, dialect.italic);
         }
         if (st.textDecoration && st.textDecoration.includes("line-through")) {
-          c = wrapMarker(c, "~");
+          c = wrapMarker(c, dialect.strike);
         }
         return c;
       }
@@ -180,10 +208,53 @@ function htmlToMrkdwn(root) {
     .trim();
 }
 
+function escapeHtml(t) {
+  return t
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Links are set aside before emphasis so markers inside a URL stay in the
+ * href, and the href is attribute-escaped so no text can add attributes.
+ */
+function formatInline(text, dialect) {
+  const source = dialect.escapeText ? escapeHtml(text) : text;
+  const links = [];
+  const withoutLinks = source.replace(dialect.linkPattern, (_, first, second) => {
+    const [href, label] = dialect.readLink(first, second);
+    const attr = dialect.escapeText ? href : escapeHtml(href);
+    const shown = label === undefined ? attr : applyEmphasis(label, dialect);
+    links.push(`<a href="${attr}" target="_blank">${shown}</a>`);
+    return `\x00LK${links.length - 1}\x00`;
+  });
+  return applyEmphasis(withoutLinks, dialect).replace(/\x00LK(\d+)\x00/g, (_, i) => links[i]);
+}
+
+function applyEmphasis(text, dialect) {
+  return dialect.emphasis.reduce(
+    (t, [pattern, replacement]) => t.replace(pattern, replacement),
+    text,
+  );
+}
+
 function wrapMarker(content, marker) {
   return content.trim() ? `${marker}${content}${marker}` : content;
 }
 
 function listItems(list) {
   return Array.from(list.children).filter((child) => child.tagName === "LI");
+}
+
+/** The browser splits <pre> on Enter, so sibling pres are one code block. */
+function adjacentPres(pre) {
+  const pres = [pre];
+  let next = pre.nextElementSibling;
+  while (next && next.tagName === "PRE") {
+    pres.push(next);
+    next = next.nextElementSibling;
+  }
+  return pres;
 }

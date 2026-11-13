@@ -828,6 +828,24 @@ describe("composeMessage", () => {
     });
   });
 
+  test("--markdown sends standard Markdown when CI skips the editor", async () => {
+    await withEnvironment({ CI: "1" }, async () => {
+      const calls: { method: string; params: Record<string, unknown> }[] = [];
+      const ctx = createContext(calls);
+
+      await composeMessage({
+        ctx,
+        targetInput: "#general",
+        initialText: "**안내 (A)**를",
+        options: { markdown: true },
+      });
+
+      expect(calls.at(-1)?.method).toBe("chat.postMessage");
+      expect(calls.at(-1)?.params.markdown_text).toBe("**안내 (A)** 를");
+      expect(calls.at(-1)?.params.text).toBeUndefined();
+    });
+  });
+
   test("keeps Slack's default preview behavior for a standard CI send", async () => {
     await withEnvironment({ CI: "1" }, async () => {
       const calls: { method: string; params: Record<string, unknown> }[] = [];

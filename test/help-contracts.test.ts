@@ -52,11 +52,12 @@ describe("agent-facing help contracts", () => {
     expect(optionDescription(send, "--no-cjk-spacing")).toContain("hair space");
   });
 
-  test("edit and draft commands document the --markdown contract", () => {
+  test("edit, compose, and draft commands document the --markdown contract", () => {
     const program = buildProgram();
 
     for (const path of [
       ["message", "edit"],
+      ["message", "compose"],
       ["message", "draft", "create"],
       ["message", "draft", "update"],
     ]) {

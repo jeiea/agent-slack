@@ -11,7 +11,9 @@ export type DraftEditorConfig = {
   workspaceUrl?: string;
   threadTs?: string;
   initialText?: string;
-  onSend: (mrkdwn: string) => Promise<{ ts: string }>;
+  /** Edit and send standard Markdown instead of Slack mrkdwn. */
+  markdown?: boolean;
+  onSend: (text: string) => Promise<{ ts: string }>;
 };
 
 export type DraftResult = { sent: true; text: string } | { cancelled: true };
@@ -100,6 +102,26 @@ export function openDraftEditor(config: DraftEditorConfig): Promise<DraftResult>
   });
 }
 
+export function buildEditorHtml(config: DraftEditorConfig): string {
+  const threadUrl = buildSlackThreadUrl(config);
+  const workspaceName = extractWorkspaceName(config.workspaceUrl);
+  const injectedConfig = JSON.stringify({
+    channelName: config.channelName,
+    channelId: config.channelId || null,
+    workspaceUrl: config.workspaceUrl || null,
+    workspaceName,
+    threadTs: config.threadTs || null,
+    threadUrl,
+    initialText: config.initialText || "",
+    markdown: config.markdown === true,
+  });
+
+  // JSON.stringify handles quotes/backslashes; escape < and > to prevent
+  // </script> breakout and other HTML injection in <script> context.
+  const safeConfig = injectedConfig.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+  return getEditorHtml().replace("__DRAFT_CONFIG__", safeConfig);
+}
+
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -150,26 +172,7 @@ function extractWorkspaceName(url?: string): string | null {
   }
 }
 
-function buildEditorHtml(config: DraftEditorConfig): string {
-  const threadUrl = buildSlackThreadUrl(config);
-  const workspaceName = extractWorkspaceName(config.workspaceUrl);
-  const injectedConfig = JSON.stringify({
-    channelName: config.channelName,
-    channelId: config.channelId || null,
-    workspaceUrl: config.workspaceUrl || null,
-    workspaceName,
-    threadTs: config.threadTs || null,
-    threadUrl,
-    initialText: config.initialText || "",
-  });
-
-  // JSON.stringify handles quotes/backslashes; escape < and > to prevent
-  // </script> breakout and other HTML injection in <script> context.
-  const safeConfig = injectedConfig.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-  return getEditorHtml().replace("__DRAFT_CONFIG__", safeConfig);
-}
-
-export function getEditorHtml(): string {
+function getEditorHtml(): string {
   // A replacer function keeps `$1`-style patterns in the script literal.
   return _editorHtmlContent.replace("/* __DRAFT_FORMAT__ */", () => _editorFormatScript);
 }

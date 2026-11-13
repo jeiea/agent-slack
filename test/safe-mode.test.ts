@@ -42,7 +42,6 @@ describe("redirectSendToDraft", () => {
     [{ schedule: "2030-01-01T00:00:00Z" }, "--schedule"],
     [{ scheduleIn: "3h" }, "--schedule-in"],
     [{ replyBroadcast: true }, "--reply-broadcast"],
-    [{ markdown: true }, "--markdown"],
   ])("rejects unsupported send option %p", async (options, flag) => {
     await expect(
       redirectSendToDraft({ ctx: stubCtx, targetInput: "#general", text: "hi", options }),
@@ -67,7 +66,7 @@ describe("redirectSendToDraft", () => {
     });
   });
 
-  test("opens a draft with the send text and thread context", async () => {
+  test("opens a draft with the send text, thread context, and dialect", async () => {
     await withEnvironment({ CI: undefined }, async () => {
       const draftCalls: unknown[] = [];
       const payload = await redirectSendToDraft(
@@ -75,7 +74,13 @@ describe("redirectSendToDraft", () => {
           ctx: stubCtx,
           targetInput: "#general",
           text: "here's the report",
-          options: { workspace: "myteam", threadTs: "1770165109.628379", unfurl: false },
+          options: {
+            workspace: "myteam",
+            threadTs: "1770165109.628379",
+            unfurl: false,
+            markdown: true,
+            cjkSpacing: false,
+          },
         },
         async (input) => {
           draftCalls.push(input);
@@ -87,7 +92,13 @@ describe("redirectSendToDraft", () => {
           ctx: stubCtx,
           targetInput: "#general",
           initialText: "here's the report",
-          options: { workspace: "myteam", threadTs: "1770165109.628379", unfurl: false },
+          options: {
+            workspace: "myteam",
+            threadTs: "1770165109.628379",
+            unfurl: false,
+            markdown: true,
+            cjkSpacing: false,
+          },
         },
       ]);
       expect(payload).toEqual({

@@ -5,12 +5,13 @@ import { resolveChannelId, resolveChannelName, normalizeChannelInput } from "../
 import { warnOnTruncatedSlackUrl } from "./message-url-warning.ts";
 import { openDraftEditor } from "./draft-server.ts";
 import { buildUnfurlApiParams } from "./unfurl-options.ts";
+import { resolveMarkdownText, type MarkdownInputOptions } from "../slack/markdown-input.ts";
 
 export async function composeMessage(input: {
   ctx: CliContext;
   targetInput: string;
   initialText?: string;
-  options: { workspace?: string; threadTs?: string; unfurl?: boolean };
+  options: { workspace?: string; threadTs?: string; unfurl?: boolean } & MarkdownInputOptions;
 }): Promise<Record<string, unknown>> {
   const target = parseMsgTarget(String(input.targetInput));
   if (target.kind === "user") {
@@ -37,10 +38,11 @@ export async function composeMessage(input: {
           workspaceUrl: ref.workspace_url,
           threadTs,
           initialText: input.initialText,
+          markdown: input.options.markdown,
           sendFn: async (text: string) => {
             const resp = await client.api("chat.postMessage", {
               channel: ref.channel_id,
-              text,
+              ...messageText(text, input.options),
               thread_ts: threadTs,
               ...buildUnfurlApiParams(input.options.unfurl),
             });
@@ -73,10 +75,11 @@ export async function composeMessage(input: {
         workspaceUrl,
         threadTs: input.options.threadTs,
         initialText: input.initialText,
+        markdown: input.options.markdown,
         sendFn: async (text: string) => {
           const resp = await client.api("chat.postMessage", {
             channel: channelId,
-            text,
+            ...messageText(text, input.options),
             thread_ts: input.options.threadTs,
             ...buildUnfurlApiParams(input.options.unfurl),
           });
@@ -93,6 +96,7 @@ async function draftWithEditor(input: {
   workspaceUrl?: string;
   threadTs?: string;
   initialText?: string;
+  markdown?: boolean;
   sendFn: (text: string) => Promise<{ ts: string }>;
 }): Promise<Record<string, unknown>> {
   // In CI mode, skip the editor and send directly
@@ -110,6 +114,7 @@ async function draftWithEditor(input: {
     workspaceUrl: input.workspaceUrl,
     threadTs: input.threadTs,
     initialText: input.initialText,
+    markdown: input.markdown,
     onSend: input.sendFn,
   });
 
@@ -118,4 +123,13 @@ async function draftWithEditor(input: {
   }
 
   return { ok: true, sent: true };
+}
+
+/** The editor and CI hand back text in the dialect the compose call chose. */
+function messageText(
+  text: string,
+  options: MarkdownInputOptions,
+): { text: string } | { markdown_text: string } {
+  const markdownText = resolveMarkdownText(text, options);
+  return markdownText === undefined ? { text } : { markdown_text: markdownText };
 }

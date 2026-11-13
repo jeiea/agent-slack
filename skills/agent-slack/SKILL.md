@@ -37,7 +37,7 @@ Named `later remind --in` values such as `tomorrow` or `monday` also use the exe
 
 Use `--no-unfurl` with `message send` or `message compose` when the user wants Slack link and media previews suppressed. It cannot be combined with `message send --attach`.
 
-For formatted text, pass `--markdown` to `message send`, `message edit`, or `message draft create|update` and write standard Markdown. With `--markdown`, `*text*` is italic (`**text**` is bold) and bare `@U...` is not promoted, so write `<@U...>`. Omit it on `message send` while safe mode is active.
+For formatted text, pass `--markdown` to `message send`, `message edit`, `message compose`, or `message draft create|update` and write standard Markdown. With `--markdown`, `*text*` is italic (`**text**` is bold) and bare `@U...` is not promoted, so write `<@U...>`.
 
 Without `--markdown`, ordinary `message send` and `message edit` calls auto-convert lists. `message send --blocks` and `message edit --blocks` use supplied Block Kit blocks, while `message send --attach` sends its initial comment without automatic list conversion. Inside auto-converted lists, use Slack's `<URL|label>` syntax because CommonMark `[label](URL)` links are not converted into labeled link elements.
 

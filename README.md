@@ -273,7 +273,7 @@ agent-slack --safe-mode message send "#general" "hello"
 
 While safe mode is active:
 
-- `message send` → redirected to the draft editor with the text pre-filled; you review and send from the browser. The output includes `"safe_mode": true` and `"redirected_from": "send"`, and a warning is printed to stderr. Flags the editor cannot represent (`--attach`, `--blocks`, `--markdown`, `--schedule`, `--schedule-in`, `--reply-broadcast`) are rejected with an error instead of being silently dropped.
+- `message send` → redirected to the draft editor with the text pre-filled; you review and send from the browser. The output includes `"safe_mode": true` and `"redirected_from": "send"`, and a warning is printed to stderr. Flags the editor cannot represent (`--attach`, `--blocks`, `--schedule`, `--schedule-in`, `--reply-broadcast`) are rejected with an error instead of being silently dropped.
 - `message edit` and `message delete` → blocked with an error.
 - All read operations (`get`, `list`, `search`, etc.) and reactions are unchanged.
 
@@ -299,7 +299,7 @@ agent-slack message edit "#general" "Updated text" --workspace "myteam" --ts "17
 agent-slack message delete "#general" --workspace "myteam" --ts "1770165109.628379"
 ```
 
-Pass `--markdown` to `message send`, `message edit`, or `message draft create|update` to write standard Markdown instead of Slack mrkdwn. Slack converts it on its side, so `**bold**`, `*italic*`, `~~strike~~`, `[label](https://example.com)` (also inside bold), headings, lists, and tables render as written:
+Pass `--markdown` to `message send`, `message edit`, `message compose`, or `message draft create|update` to write standard Markdown instead of Slack mrkdwn. Slack converts it on its side, so `**bold**`, `*italic*`, `~~strike~~`, `[label](https://example.com)` (also inside bold), headings, lists, and tables render as written:
 
 ```bash
 agent-slack message send "#general" --markdown "**Release ([notes](https://example.com/notes))** is out"
@@ -307,7 +307,7 @@ agent-slack message send "#general" --markdown "**Release ([notes](https://examp
 
 With `--markdown`, text is sent as written: bare `@U...` and `@here` are not converted to mentions, so write `<@U...>`. A hair space (U+200A) is inserted between an emphasis marker and an adjacent letter when punctuation is on its other side, as in `**제목(A)**은` or `이것은**(A)제목**`, which Slack would otherwise leave literal; `--no-cjk-spacing` turns this off.
 
-Combined with `--attach`, the Markdown text becomes the file comment. `--markdown` cannot be combined with `--blocks`, and safe mode rejects it on `message send` because the draft editor only takes mrkdwn.
+Combined with `--attach`, the Markdown text becomes the file comment. `--markdown` cannot be combined with `--blocks`. In `message compose`, and in safe mode's redirect of `message send`, the editor reads and writes Markdown; tables and headings stay as text there and Slack converts them on send.
 
 Without `--markdown`, `message edit` and ordinary `message send` calls convert bullet/numbered lists to Slack native rich text. `message send --blocks` uses the supplied blocks instead, while `message send --attach` sends its initial comment as plain text without automatic list conversion. Inside auto-converted lists, inline mentions, broadcasts, emoji shortcodes, `<#C...>` channel references, and Slack manual links such as `<https://example.com/pull/42|PR #42>` are preserved as Slack elements. CommonMark links such as `[PR #42](https://example.com/pull/42)` are not converted into labeled link elements.
 
