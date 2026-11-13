@@ -37,7 +37,9 @@ Named `later remind --in` values such as `tomorrow` or `monday` also use the exe
 
 Use `--no-unfurl` with `message send` or `message compose` when the user wants Slack link and media previews suppressed. It cannot be combined with `message send --attach`.
 
-Ordinary `message send` and `message edit` calls auto-convert lists. `message send --blocks` and `message edit --blocks` use supplied Block Kit blocks, while `message send --attach` sends its initial comment without automatic list conversion. Inside auto-converted lists, use Slack's `<URL|label>` syntax because CommonMark `[label](URL)` links are not converted into labeled link elements.
+For formatted text, pass `--markdown` to `message send`, `message edit`, or `message draft create|update` and write standard Markdown. With `--markdown`, `*text*` is italic (`**text**` is bold) and bare `@U...` is not promoted, so write `<@U...>`. Omit it on `message send` while safe mode is active.
+
+Without `--markdown`, ordinary `message send` and `message edit` calls auto-convert lists. `message send --blocks` and `message edit --blocks` use supplied Block Kit blocks, while `message send --attach` sends its initial comment without automatic list conversion. Inside auto-converted lists, use Slack's `<URL|label>` syntax because CommonMark `[label](URL)` links are not converted into labeled link elements.
 
 Slack-native drafts (`message draft list|create|update|delete`) manage drafts that appear in the user's Slack client; `create` posts nothing. `create` and `update` accept repeatable `--attach <path>`; on `update` the files are added to the draft's existing attachments rather than replacing them. They use undocumented session endpoints and require browser-style auth (xoxc/xoxd).
 

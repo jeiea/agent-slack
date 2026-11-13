@@ -10,6 +10,7 @@
 import type { SlackApiClient } from "./client.ts";
 import { asArray, getNumber, getString, isRecord } from "../lib/object-type-guards.ts";
 import { extractMrkdwnFromRichTextBlock } from "./render-rich-text.ts";
+import { markdownBlocks } from "./markdown-input.ts";
 import { parseInlineElements, textToRichTextBlocks } from "./rich-text.ts";
 
 export type DraftDestination = {
@@ -134,14 +135,15 @@ export async function findDraft(client: SlackApiClient, draftId: string): Promis
 }
 
 /**
- * Shared wire payload for drafts.create / drafts.update: text wrapped as a
- * rich_text block, addressed to one destination, with a fresh client_msg_id.
+ * Shared wire payload for drafts.create / drafts.update: mrkdwn text wrapped
+ * as a rich_text block (or standard Markdown that Slack converts), addressed to one destination, with a fresh client_msg_id.
  * `blocks`, `destinations` and `file_ids` are serialized to JSON strings by
  * the form-encoding client, which is what these endpoints expect.
  */
 function buildDraftBody(input: {
   channelId: string;
   text: string;
+  markdown?: boolean;
   threadTs?: string;
   broadcast?: boolean;
   fileIds?: string[];
@@ -152,7 +154,7 @@ function buildDraftBody(input: {
     destination.broadcast = input.broadcast === true;
   }
   return {
-    blocks: draftTextToBlocks(input.text),
+    blocks: input.markdown ? markdownBlocks(input.text) : draftTextToBlocks(input.text),
     destinations: [destination],
     client_msg_id: crypto.randomUUID(),
     file_ids: input.fileIds ?? [],
@@ -181,6 +183,7 @@ export async function createDraft(
   input: {
     channelId: string;
     text: string;
+    markdown?: boolean;
     threadTs?: string;
     broadcast?: boolean;
     fileIds?: string[];
@@ -202,6 +205,7 @@ export async function updateDraft(
     clientLastUpdatedTs: string;
     channelId: string;
     text: string;
+    markdown?: boolean;
     threadTs?: string;
     broadcast?: boolean;
     fileIds?: string[];

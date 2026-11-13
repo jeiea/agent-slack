@@ -91,7 +91,7 @@ function completedFileIds(resp: unknown): (string | undefined)[] | undefined {
 /**
  * Upload a local file and attach it to a Slack message in one shot. The
  * completion call binds the file to `channelId` (and optionally the thread),
- * so the file posts with `initialComment` immediately.
+ * so the file posts with `initialComment` (or comment `blocks`) immediately.
  */
 export async function uploadLocalFileToSlack(input: {
   client: SlackApiClient;
@@ -99,6 +99,7 @@ export async function uploadLocalFileToSlack(input: {
   filePath: string;
   threadTs?: string;
   initialComment?: string;
+  blocks?: unknown[];
 }): Promise<void> {
   const { fileId, filename } = await stageFileUpload({
     client: input.client,
@@ -110,6 +111,7 @@ export async function uploadLocalFileToSlack(input: {
     channel_id: input.channelId,
     thread_ts: input.threadTs,
     initial_comment: input.initialComment?.trim() || undefined,
+    blocks: input.blocks,
   });
 
   ensureCompleteOk(completeResp);

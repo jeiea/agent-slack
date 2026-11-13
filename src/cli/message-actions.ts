@@ -7,6 +7,11 @@ import { normalizeSlackReactionName } from "../slack/emoji.ts";
 import { warnOnTruncatedSlackUrl } from "./message-url-warning.ts";
 import { textToRichTextBlocks } from "../slack/rich-text.ts";
 import { formatOutboundSlackText } from "../slack/format-outbound.ts";
+import {
+  markdownBlocks,
+  resolveMarkdownText,
+  type MarkdownInputOptions,
+} from "../slack/markdown-input.ts";
 import type { SlackApiClient } from "../slack/client.ts";
 import { uploadLocalFileToSlack } from "../slack/upload.ts";
 import { buildSlackMessageUrl } from "../slack/url.ts";
@@ -117,7 +122,7 @@ export async function sendMessage(input: {
     schedule?: string;
     scheduleIn?: string;
     unfurl?: boolean;
-  };
+  } & MarkdownInputOptions;
 }): Promise<Record<string, unknown>> {
   const target = parseMsgTarget(String(input.targetInput));
   const attachPaths = normalizeAttachPaths(input.options.attach);
@@ -135,12 +140,7 @@ export async function sendMessage(input: {
       "--no-unfurl cannot be combined with --attach (Slack file uploads do not accept unfurl parameters).",
     );
   }
-  const formattedText = formatOutboundSlackText(input.text);
-  const blocks = input.options.blocks
-    ? loadBlocksFromPath(input.options.blocks)
-    : input.text
-      ? textToRichTextBlocks(input.text)
-      : null;
+  const body = buildMessageBody(input.text, input.options);
 
   if (target.kind === "url") {
     const { ref } = target;
@@ -155,8 +155,7 @@ export async function sendMessage(input: {
           client,
           workspaceUrl: workspace_url ?? ref.workspace_url,
           channelId: ref.channel_id,
-          text: formattedText,
-          blocks,
+          body,
           threadTs,
           replyBroadcast: input.options.replyBroadcast,
           attachPaths,
@@ -181,8 +180,7 @@ export async function sendMessage(input: {
           client,
           workspaceUrl: workspace_url ?? workspaceUrl,
           channelId: dmChannelId,
-          text: formattedText,
-          blocks,
+          body,
           attachPaths,
           postAt,
           unfurl: input.options.unfurl,
@@ -208,8 +206,7 @@ export async function sendMessage(input: {
         client,
         workspaceUrl: workspace_url ?? workspaceUrl,
         channelId,
-        text: formattedText,
-        blocks,
+        body,
         threadTs: input.options.threadTs ? String(input.options.threadTs) : undefined,
         replyBroadcast: input.options.replyBroadcast,
         attachPaths,
@@ -224,8 +221,7 @@ async function sendMessageToChannel(input: {
   client: SlackApiClient;
   workspaceUrl?: string;
   channelId: string;
-  text: string;
-  blocks?: unknown[] | null;
+  body: MessageBody;
   threadTs?: string;
   replyBroadcast?: boolean;
   attachPaths: string[];
@@ -235,10 +231,9 @@ async function sendMessageToChannel(input: {
   if (input.postAt !== undefined) {
     const resp = await input.client.api("chat.scheduleMessage", {
       channel: input.channelId,
-      text: input.text,
+      ...input.body,
       post_at: input.postAt,
       thread_ts: input.threadTs,
-      ...(input.blocks ? { blocks: input.blocks } : {}),
       ...(input.replyBroadcast && input.threadTs ? { reply_broadcast: true } : {}),
       ...buildUnfurlApiParams(input.unfurl),
     });
@@ -257,9 +252,8 @@ async function sendMessageToChannel(input: {
   if (input.attachPaths.length === 0) {
     const resp = await input.client.api("chat.postMessage", {
       channel: input.channelId,
-      text: input.text,
+      ...input.body,
       thread_ts: input.threadTs,
-      ...(input.blocks ? { blocks: input.blocks } : {}),
       ...(input.replyBroadcast && input.threadTs ? { reply_broadcast: true } : {}),
       ...buildUnfurlApiParams(input.unfurl),
     });
@@ -283,22 +277,16 @@ async function sendMessageToChannel(input: {
     };
   }
 
-  if (input.blocks) {
-    process.stderr.write(
-      "Warning: rich text formatting is not supported with file attachments; sending as plain text.\n",
-    );
-  }
-
-  let initialComment = input.text;
+  let comment = attachmentComment(input.body);
   for (const filePath of input.attachPaths) {
     await uploadLocalFileToSlack({
       client: input.client,
       channelId: input.channelId,
       filePath,
       threadTs: input.threadTs,
-      initialComment,
+      ...comment,
     });
-    initialComment = "";
+    comment = {};
   }
 
   return {
@@ -306,6 +294,22 @@ async function sendMessageToChannel(input: {
     channel_id: input.channelId,
     thread_ts: input.threadTs,
   };
+}
+
+/**
+ * File uploads have no `markdown_text`, but take Markdown blocks as long as
+ * `initial_comment` is absent (Slack ignores blocks otherwise).
+ */
+function attachmentComment(body: MessageBody): { initialComment?: string; blocks?: unknown[] } {
+  if ("markdown_text" in body) {
+    return body.markdown_text.trim() ? { blocks: markdownBlocks(body.markdown_text) } : {};
+  }
+  if (body.blocks) {
+    process.stderr.write(
+      "Warning: rich text formatting is not supported with file attachments; sending as plain text.\n",
+    );
+  }
+  return { initialComment: body.text };
 }
 
 function getResponseNumber(value: unknown): number | undefined {
@@ -323,7 +327,7 @@ export async function editMessage(input: {
   ctx: CliContext;
   targetInput: string;
   text: string;
-  options: { workspace?: string; ts?: string; blocks?: string };
+  options: { workspace?: string; ts?: string; blocks?: string } & MarkdownInputOptions;
 }): Promise<Record<string, unknown>> {
   const target = parseMsgTarget(String(input.targetInput));
   if (target.kind === "user") {
@@ -332,12 +336,7 @@ export async function editMessage(input: {
     );
   }
   const workspaceUrl = input.ctx.effectiveWorkspaceUrl(input.options.workspace);
-  const formattedText = formatOutboundSlackText(input.text);
-  const blocks = input.options.blocks
-    ? loadBlocksFromPath(input.options.blocks)
-    : input.text
-      ? textToRichTextBlocks(input.text)
-      : null;
+  const body = buildMessageBody(input.text, input.options);
 
   await input.ctx.withAutoRefresh({
     workspaceUrl: target.kind === "url" ? target.ref.workspace_url : workspaceUrl,
@@ -349,8 +348,7 @@ export async function editMessage(input: {
         await client.api("chat.update", {
           channel: ref.channel_id,
           ts: ref.message_ts,
-          text: formattedText,
-          ...(blocks ? { blocks } : {}),
+          ...body,
         });
         return;
       }
@@ -365,13 +363,31 @@ export async function editMessage(input: {
       await client.api("chat.update", {
         channel: channelId,
         ts,
-        text: formattedText,
-        ...(blocks ? { blocks } : {}),
+        ...body,
       });
     },
   });
 
   return { ok: true };
+}
+
+/** `chat.*` content params: mrkdwn `text` (+ blocks), or standard Markdown. */
+type MessageBody = { text: string; blocks?: unknown[] } | { markdown_text: string };
+
+function buildMessageBody(
+  text: string,
+  options: { blocks?: string } & MarkdownInputOptions,
+): MessageBody {
+  const markdownText = resolveMarkdownText(text, options);
+  if (markdownText !== undefined) {
+    return { markdown_text: markdownText };
+  }
+  const blocks = options.blocks
+    ? loadBlocksFromPath(options.blocks)
+    : text
+      ? textToRichTextBlocks(text)
+      : null;
+  return { text: formatOutboundSlackText(text), ...(blocks ? { blocks } : {}) };
 }
 
 export async function deleteMessage(input: {

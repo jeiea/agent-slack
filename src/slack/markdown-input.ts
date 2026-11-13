@@ -29,6 +29,8 @@ const PROTECTED_RE = new RegExp(
 );
 const DELIMITER_CHARS = new Set(["*", "_", "~"]);
 
+export type MarkdownInputOptions = { markdown?: boolean; cjkSpacing?: boolean };
+
 type CharClass = "space" | "punct" | "other";
 
 type DelimiterRun = {
@@ -38,6 +40,29 @@ type DelimiterRun = {
   before: CharClass;
   after: CharClass;
 };
+
+/**
+ * Text to hand to Slack as standard Markdown, or `undefined` when the caller
+ * keeps the mrkdwn path. The text is otherwise sent as written: mrkdwn-only
+ * rewrites such as promoting bare `@U...` / `@here` are not applied.
+ */
+export function resolveMarkdownText(
+  text: string,
+  options: MarkdownInputOptions & { blocks?: string },
+): string | undefined {
+  if (!options.markdown) {
+    return undefined;
+  }
+  if (options.blocks !== undefined) {
+    throw new Error("--markdown cannot be combined with --blocks.");
+  }
+  return options.cjkSpacing === false ? text : padFlankingDelimiters(text);
+}
+
+/** Blocks that Slack converts from standard Markdown on its side. */
+export function markdownBlocks(text: string): unknown[] {
+  return [{ type: "markdown", text }];
+}
 
 /**
  * CommonMark ignores an emphasis delimiter that touches punctuation on its

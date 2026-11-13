@@ -36,12 +36,13 @@ export type SendOptionsForRedirect = {
   schedule?: string;
   scheduleIn?: string;
   unfurl?: boolean;
+  markdown?: boolean;
 };
 
 /**
  * Redirects `message send` to the interactive draft editor so a human
  * reviews and sends the message. Flags the draft editor cannot represent
- * (attachments, raw blocks, scheduling, broadcasts) are rejected instead
+ * (attachments, raw blocks, scheduling, broadcasts, Markdown) are rejected instead
  * of being silently dropped.
  */
 export async function redirectSendToDraft(
@@ -68,6 +69,9 @@ export async function redirectSendToDraft(
   }
   if (input.options.replyBroadcast) {
     unsupported.push("--reply-broadcast");
+  }
+  if (input.options.markdown) {
+    unsupported.push("--markdown");
   }
   if (unsupported.length > 0) {
     throw new Error(

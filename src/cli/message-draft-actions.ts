@@ -11,6 +11,7 @@ import {
   updateDraft,
   type SlackDraft,
 } from "../slack/drafts.ts";
+import { resolveMarkdownText, type MarkdownInputOptions } from "../slack/markdown-input.ts";
 import { fetchMessage } from "../slack/messages.ts";
 import { getString, isRecord } from "../lib/object-type-guards.ts";
 import { normalizeScheduleLimit } from "../slack/scheduled-messages.ts";
@@ -40,7 +41,12 @@ export async function createDraftAction(input: {
   ctx: CliContext;
   targetInput: string;
   text: string;
-  options: { workspace?: string; threadTs?: string; broadcast?: boolean; attach?: string[] };
+  options: {
+    workspace?: string;
+    threadTs?: string;
+    broadcast?: boolean;
+    attach?: string[];
+  } & MarkdownInputOptions;
 }): Promise<Record<string, unknown>> {
   const target = parseMsgTarget(String(input.targetInput));
   const workspaceUrl =
@@ -86,7 +92,7 @@ export async function createDraftAction(input: {
         }
         const draft = await createDraft(client, {
           channelId,
-          text: input.text,
+          ...draftContent(input.text, input.options),
           threadTs,
           broadcast: input.options.broadcast,
           fileIds: uploadedFileIds,
@@ -113,7 +119,7 @@ export async function updateDraftAction(input: {
     broadcast?: boolean;
     lastUpdatedTs?: string;
     attach?: string[];
-  };
+  } & MarkdownInputOptions;
 }): Promise<Record<string, unknown>> {
   const channelTarget = input.options.channel
     ? parseMsgTarget(String(input.options.channel))
@@ -204,7 +210,7 @@ export async function updateDraftAction(input: {
           draftId: input.draftId,
           clientLastUpdatedTs: lastUpdatedTs,
           channelId: resolved.channelId,
-          text: input.text,
+          ...draftContent(input.text, input.options),
           threadTs: resolved.threadTs,
           broadcast,
           fileIds: mergeFileIds(existing.file_ids, uploadedFileIds),
@@ -237,6 +243,14 @@ export async function deleteDraftAction(input: {
       return { ok: true, draft_id: input.draftId };
     },
   });
+}
+
+function draftContent(
+  text: string,
+  options: MarkdownInputOptions,
+): { text: string; markdown: boolean } {
+  const markdownText = resolveMarkdownText(text, options);
+  return { text: markdownText ?? text, markdown: markdownText !== undefined };
 }
 
 /** Slack 1:1 DM channels are `D...`; broadcast has no channel to target there. */

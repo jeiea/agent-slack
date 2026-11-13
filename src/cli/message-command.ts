@@ -13,6 +13,8 @@ import { composeMessage } from "./compose-actions.ts";
 import { registerScheduledMessageCommand } from "./message-scheduled-command.ts";
 import { registerMessageDraftCommand } from "./message-draft-command.ts";
 import { isSafeModeEnabled, redirectSendToDraft, safeModeBlockedError } from "./safe-mode.ts";
+import { CJK_SPACING_OPTION_HELP, MARKDOWN_OPTION_HELP } from "./markdown-options.ts";
+import type { MarkdownInputOptions } from "../slack/markdown-input.ts";
 import { collectOptionValue } from "./options.ts";
 
 export function registerMessageCommand(input: { program: Command; ctx: CliContext }): void {
@@ -115,11 +117,13 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
     )
     .option("--ts <ts>", "Message ts (required when using #channel/channel id)")
     .option("--blocks <path>", "Read Block Kit blocks JSON from file or '-'")
+    .option("--markdown", `${MARKDOWN_OPTION_HELP} Cannot be combined with --blocks.`)
+    .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
       const [targetInput, text, options] = args as [
         string,
         string,
-        { workspace?: string; ts?: string; blocks?: string },
+        { workspace?: string; ts?: string; blocks?: string } & MarkdownInputOptions,
       ];
       try {
         if (safeModeActive()) {
@@ -201,6 +205,11 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
       "Schedule delivery within 120 days after a duration or future phrase, e.g. 3h or monday 9am. Named phrases use this process's local timezone. Cannot be combined with --attach.",
     )
     .option("--no-unfurl", "Suppress link and media previews. Cannot be combined with --attach.")
+    .option(
+      "--markdown",
+      `${MARKDOWN_OPTION_HELP} With --attach, the text becomes the comment. Cannot be combined with --blocks; rejected in safe mode.`,
+    )
+    .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
       const [targetInput, text, options] = args as [
         string,
@@ -214,7 +223,7 @@ export function registerMessageCommand(input: { program: Command; ctx: CliContex
           schedule?: string;
           scheduleIn?: string;
           unfurl?: boolean;
-        },
+        } & MarkdownInputOptions,
       ];
       const hasAttach = (options.attach ?? []).length > 0;
       const hasBlocks = options.blocks !== undefined;

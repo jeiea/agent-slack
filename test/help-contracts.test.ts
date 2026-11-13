@@ -48,6 +48,24 @@ describe("agent-facing help contracts", () => {
     expect(optionDescription(send, "--thread-ts")).toContain("channel targets");
     expect(optionDescription(send, "--reply-broadcast")).toContain("DM targets");
     expect(optionDescription(send, "--no-unfurl")).toContain("link and media previews");
+    expect(optionDescription(send, "--markdown")).toContain("bare @U... and @here are not");
+    expect(optionDescription(send, "--no-cjk-spacing")).toContain("hair space");
+  });
+
+  test("edit and draft commands document the --markdown contract", () => {
+    const program = buildProgram();
+
+    for (const path of [
+      ["message", "edit"],
+      ["message", "draft", "create"],
+      ["message", "draft", "update"],
+    ]) {
+      const command = findCommand(program, ...path);
+      expect(optionDescription(command, "--markdown"), path.join(" ")).toContain("not converted");
+      expect(optionDescription(command, "--no-cjk-spacing"), path.join(" ")).toContain(
+        "hair space",
+      );
+    }
   });
 
   test("message compose identifies its CI send behavior", () => {

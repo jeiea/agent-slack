@@ -7,6 +7,8 @@ import {
   updateDraftAction,
 } from "./message-draft-actions.ts";
 import { collectOptionValue } from "./options.ts";
+import { CJK_SPACING_OPTION_HELP, MARKDOWN_OPTION_HELP } from "./markdown-options.ts";
+import type { MarkdownInputOptions } from "../slack/markdown-input.ts";
 
 export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: CliContext }): void {
   const draftCmd = input.messageCmd
@@ -42,7 +44,7 @@ export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: C
       "<target>",
       "Slack message URL (drafts a thread reply), #name/name, channel id, or user id (DM)",
     )
-    .argument("<text>", "Draft message text (mrkdwn format)")
+    .argument("<text>", "Draft message text (mrkdwn format, or standard Markdown with --markdown)")
     .option(
       "--workspace <url>",
       "Workspace selector (full URL or unique substring; needed when using #channel/channel id across multiple workspaces)",
@@ -58,11 +60,18 @@ export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: C
       collectOptionValue,
       [],
     )
+    .option("--markdown", MARKDOWN_OPTION_HELP)
+    .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
       const [targetInput, text, options] = args as [
         string,
         string,
-        { workspace?: string; threadTs?: string; broadcast?: boolean; attach?: string[] },
+        {
+          workspace?: string;
+          threadTs?: string;
+          broadcast?: boolean;
+          attach?: string[];
+        } & MarkdownInputOptions,
       ];
       try {
         const payload = await createDraftAction({ ctx: input.ctx, targetInput, text, options });
@@ -77,7 +86,10 @@ export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: C
     .command("update")
     .description("Replace a draft's text (and optionally re-address it)")
     .argument("<draft-id>", "Draft id returned by draft list/create")
-    .argument("<text>", "New draft message text (replaces the existing body)")
+    .argument(
+      "<text>",
+      "New draft message text (replaces the existing body; standard Markdown with --markdown)",
+    )
     .option(
       "--workspace <url>",
       "Workspace selector (full URL or unique substring; needed when using #channel/channel id across multiple workspaces)",
@@ -99,6 +111,8 @@ export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: C
       "--last-updated-ts <ts>",
       "Draft last_updated_ts for conflict detection (auto-fetched when omitted)",
     )
+    .option("--markdown", MARKDOWN_OPTION_HELP)
+    .option("--no-cjk-spacing", CJK_SPACING_OPTION_HELP)
     .action(async (...args) => {
       const [draftId, text, options] = args as [
         string,
@@ -110,7 +124,7 @@ export function registerMessageDraftCommand(input: { messageCmd: Command; ctx: C
           broadcast?: boolean;
           lastUpdatedTs?: string;
           attach?: string[];
-        },
+        } & MarkdownInputOptions,
       ];
       try {
         const payload = await updateDraftAction({ ctx: input.ctx, draftId, text, options });

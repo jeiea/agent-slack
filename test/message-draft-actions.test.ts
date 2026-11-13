@@ -158,6 +158,21 @@ describe("createDraftAction", () => {
     });
   });
 
+  test("creates a --markdown draft as a Slack Markdown block", async () => {
+    const calls: Call[] = [];
+    const ctx = createContext(calls);
+
+    await createDraftAction({
+      ctx,
+      targetInput: "C11111111",
+      text: "**안내 (A)**를",
+      options: { markdown: true },
+    });
+
+    const create = calls.find((c) => c.method === "drafts.create");
+    expect(create?.params.blocks).toEqual([{ type: "markdown", text: "**안내 (A)** 를" }]);
+  });
+
   test("rejects --broadcast without a thread", async () => {
     const calls: Call[] = [];
     const ctx = createContext(calls);
@@ -326,6 +341,22 @@ describe("updateDraftAction", () => {
     expect(update.params.destinations).toEqual([
       { channel_id: "C11111111", thread_ts: "1700000000.100000", broadcast: true },
     ]);
+    expect(update.params.file_ids).toEqual(["F1", "F2"]);
+  });
+
+  test("updates a draft with --markdown text and keeps its files", async () => {
+    const calls: Call[] = [];
+    const ctx = createContext(calls, { draftsList: [threadedBroadcastDraft] });
+
+    await updateDraftAction({
+      ctx,
+      draftId: "Dr123",
+      text: "**revised (A)**를",
+      options: { markdown: true, cjkSpacing: false },
+    });
+
+    const update = draftsUpdateCall(calls);
+    expect(update.params.blocks).toEqual([{ type: "markdown", text: "**revised (A)**를" }]);
     expect(update.params.file_ids).toEqual(["F1", "F2"]);
   });
 

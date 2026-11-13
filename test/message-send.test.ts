@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,13 +101,30 @@ function createContext(
   } satisfies CliContext;
 }
 
-describe("sendMessage", () => {
+/** Files to attach, with Slack's upload URL stubbed; `await using` restores both. */
+async function attachmentFixture(files: Record<string, string>) {
+  const dir = await mkdtemp(join(tmpdir(), "agent-slack-send-test-"));
+  const paths = await Promise.all(
+    Object.entries(files).map(async ([name, content]) => {
+      const path = join(dir, name);
+      await writeFile(path, content);
+      return path;
+    }),
+  );
   const originalFetch = globalThis.fetch;
+  const upload = mock(async () => new Response("", { status: 200 }));
+  globalThis.fetch = upload as unknown as typeof fetch;
+  return {
+    paths,
+    upload,
+    async [Symbol.asyncDispose]() {
+      globalThis.fetch = originalFetch;
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
+describe("sendMessage", () => {
   test("posts a normal message when no attachments are passed", async () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const ctx = createContext(calls);
@@ -360,29 +377,20 @@ describe("sendMessage", () => {
   test("uploads attachment and uses message text as initial comment", async () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const ctx = createContext(calls);
-    const dir = await mkdtemp(join(tmpdir(), "agent-slack-send-test-"));
-    const filePath = join(dir, "report.md");
-    await writeFile(filePath, "# report\n");
+    await using files = await attachmentFixture({ "report.md": "# report\n" });
 
-    const fetchMock = mock(async () => new Response("", { status: 200 }));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    try {
-      await sendMessage({
-        ctx,
-        targetInput: "C12345678",
-        text: "here's the report",
-        options: { attach: [filePath] },
-      });
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "here's the report",
+      options: { attach: files.paths },
+    });
 
     expect(calls[0]?.method).toBe("files.getUploadURLExternal");
     expect(calls[1]?.method).toBe("files.completeUploadExternal");
     expect(calls[1]?.params.initial_comment).toBe("here's the report");
     expect(calls.some((c) => c.method === "chat.postMessage")).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(files.upload).toHaveBeenCalledTimes(1);
   });
 
   test("--no-unfurl cannot be combined with file attachments", async () => {
@@ -404,53 +412,33 @@ describe("sendMessage", () => {
   test("sends initial comment only for the first attachment", async () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const ctx = createContext(calls);
-    const dir = await mkdtemp(join(tmpdir(), "agent-slack-send-test-"));
-    const first = join(dir, "report.md");
-    const second = join(dir, "log.txt");
-    await writeFile(first, "# report\n");
-    await writeFile(second, "ok\n");
+    await using files = await attachmentFixture({ "report.md": "# report\n", "log.txt": "ok\n" });
 
-    const fetchMock = mock(async () => new Response("", { status: 200 }));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    try {
-      await sendMessage({
-        ctx,
-        targetInput: "C12345678",
-        text: "see files",
-        options: { attach: [first, second] },
-      });
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "see files",
+      options: { attach: files.paths },
+    });
 
     const completes = calls.filter((c) => c.method === "files.completeUploadExternal");
     expect(completes).toHaveLength(2);
     expect(completes[0]?.params.initial_comment).toBe("see files");
     expect(completes[1]?.params.initial_comment).toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(files.upload).toHaveBeenCalledTimes(2);
   });
 
   test("uploads attachment without text when text is empty", async () => {
     const calls: { method: string; params: Record<string, unknown> }[] = [];
     const ctx = createContext(calls);
-    const dir = await mkdtemp(join(tmpdir(), "agent-slack-send-test-"));
-    const filePath = join(dir, "data.csv");
-    await writeFile(filePath, "a,b\n1,2\n");
+    await using files = await attachmentFixture({ "data.csv": "a,b\n1,2\n" });
 
-    const fetchMock = mock(async () => new Response("", { status: 200 }));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    try {
-      await sendMessage({
-        ctx,
-        targetInput: "C12345678",
-        text: "",
-        options: { attach: [filePath] },
-      });
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "",
+      options: { attach: files.paths },
+    });
 
     expect(calls[0]?.method).toBe("files.getUploadURLExternal");
     expect(calls[1]?.method).toBe("files.completeUploadExternal");
@@ -723,6 +711,78 @@ describe("sendMessage", () => {
       blocks,
       reply_broadcast: true,
     });
+  });
+
+  test("--markdown hands the text to Slack as standard Markdown", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const ctx = createContext(calls);
+
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "**안내 ([화면](https://a.com))**를 확인 @U12345678",
+      options: { markdown: true },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("chat.postMessage");
+    expect(calls[0]?.params.markdown_text).toBe(
+      "**안내 ([화면](https://a.com))** 를 확인 @U12345678",
+    );
+    expect(calls[0]?.params.text, "Slack rejects text with markdown_text").toBeUndefined();
+    expect(calls[0]?.params.blocks).toBeUndefined();
+  });
+
+  test("--markdown schedules standard Markdown", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const ctx = createContext(calls);
+
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "**later**",
+      options: { markdown: true, scheduleIn: "1h" },
+    });
+
+    expect(calls[0]?.method).toBe("chat.scheduleMessage");
+    expect(calls[0]?.params.markdown_text).toBe("**later**");
+    expect(calls[0]?.params.text).toBeUndefined();
+  });
+
+  test("--markdown attaches files under a Markdown comment", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const ctx = createContext(calls);
+    await using files = await attachmentFixture({ "report.md": "# report\n", "log.txt": "ok\n" });
+
+    await sendMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "**see (A)**를",
+      options: { markdown: true, attach: files.paths },
+    });
+
+    const completes = calls.filter((c) => c.method === "files.completeUploadExternal");
+    expect(completes[0]?.params.blocks).toEqual([{ type: "markdown", text: "**see (A)** 를" }]);
+    expect(
+      completes[0]?.params.initial_comment,
+      "Slack ignores blocks when initial_comment is set",
+    ).toBeUndefined();
+    expect(completes[1]?.params.blocks).toBeUndefined();
+  });
+
+  test("--markdown cannot be combined with --blocks", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const ctx = createContext(calls);
+
+    await expect(
+      sendMessage({
+        ctx,
+        targetInput: "C12345678",
+        text: "**hi**",
+        options: { markdown: true, blocks: "./blocks.json" },
+      }),
+    ).rejects.toThrow(/--markdown cannot be combined with --blocks/);
+    expect(calls).toHaveLength(0);
   });
 
   test("--schedule cannot be combined with file attachments", async () => {
@@ -1148,5 +1208,24 @@ describe("editMessage", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("chat.update");
     expect(calls[0]?.params.blocks).toEqual(blocks);
+  });
+
+  test("edits with --markdown and keeps text as written without CJK spacing", async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    const ctx = createContext(calls);
+
+    await editMessage({
+      ctx,
+      targetInput: "C12345678",
+      text: "**제목(A)**은",
+      options: { ts: "1770165109.628379", markdown: true, cjkSpacing: false },
+    });
+
+    expect(calls[0]?.method).toBe("chat.update");
+    expect(calls[0]?.params).toMatchObject({
+      ts: "1770165109.628379",
+      markdown_text: "**제목(A)**은",
+    });
+    expect(calls[0]?.params.text).toBeUndefined();
   });
 });
