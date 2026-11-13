@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { execFile } from "node:child_process";
 // @ts-ignore — import attributes need module:"esnext" in tsconfig; Bun handles this fine
 import _editorHtmlContent from "./draft-editor.html" with { type: "text" };
+// @ts-ignore — a plain browser script read as text and inlined into the editor page
+import _editorFormatScript from "./draft-editor-format.js" with { type: "text" };
 
 export type DraftEditorConfig = {
   channelName: string;
@@ -167,6 +169,7 @@ function buildEditorHtml(config: DraftEditorConfig): string {
   return getEditorHtml().replace("__DRAFT_CONFIG__", safeConfig);
 }
 
-function getEditorHtml(): string {
-  return _editorHtmlContent;
+export function getEditorHtml(): string {
+  // A replacer function keeps `$1`-style patterns in the script literal.
+  return _editorHtmlContent.replace("/* __DRAFT_FORMAT__ */", () => _editorFormatScript);
 }
