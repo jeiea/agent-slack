@@ -111,6 +111,16 @@ describe("draft editor standard Markdown", () => {
 });
 
 describe("draft editor page", () => {
+  test.each(["가격 $& 할인", "끝 $' 뒤", "$$5"])("opens with %p as written", (initialText) => {
+    const html = buildEditorHtml({
+      channelName: "general",
+      initialText,
+      onSend: async () => ({ ts: "1" }),
+    });
+    const config = JSON.parse(/const CONFIG = (.*);\n/.exec(html)?.[1] ?? "null");
+    expect(config?.initialText).toBe(initialText);
+  });
+
   test("a --markdown compose page edits with the tested Markdown converter", () => {
     const html = buildEditorHtml({
       channelName: "general",

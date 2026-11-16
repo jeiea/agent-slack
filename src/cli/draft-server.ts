@@ -119,7 +119,8 @@ export function buildEditorHtml(config: DraftEditorConfig): string {
   // JSON.stringify handles quotes/backslashes; escape < and > to prevent
   // </script> breakout and other HTML injection in <script> context.
   const safeConfig = injectedConfig.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-  return getEditorHtml().replace("__DRAFT_CONFIG__", safeConfig);
+  // A replacer function keeps `$&`-style patterns in the user text literal.
+  return getEditorHtml().replace("__DRAFT_CONFIG__", () => safeConfig);
 }
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
