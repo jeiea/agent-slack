@@ -234,7 +234,7 @@ After sending, the editor shows a "View in Slack" link to the posted message.
 
 ### Slack-native drafts
 
-Manage drafts through Slack's own drafts API, so they show up natively in the user's Slack client (mobile and desktop) ready to review and send. Requires browser-style auth (xoxc/xoxd).
+Manage drafts through Slack's own drafts API. New drafts attach to the message input of the target channel, DM, or thread, ready to review and send in Slack. Requires browser-style auth (xoxc/xoxd).
 
 > [!NOTE]
 > These commands use Slack's **undocumented** internal `drafts.*` client endpoints (the same ones the Slack app uses), authenticated with your own browser session. They act only as you, on your own drafts — nothing is exposed that you can't already see, and `create` posts nothing. But because the endpoints are unsupported: their behavior may change without notice, and on **Enterprise Grid** this style of session-token API use can be flagged by Slack's security/anomaly detection. This is the same auth model the rest of agent-slack already uses (`later`, `unreads`, `search`); use it where that's acceptable.

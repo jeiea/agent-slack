@@ -41,7 +41,7 @@ For formatted text, pass `--markdown` to `message send`, `message edit`, `messag
 
 Without `--markdown`, ordinary `message send` and `message edit` calls auto-convert lists. `message send --blocks` and `message edit --blocks` use supplied Block Kit blocks, while `message send --attach` sends its initial comment without automatic list conversion. Inside auto-converted lists, use Slack's `<URL|label>` syntax because CommonMark `[label](URL)` links are not converted into labeled link elements.
 
-Slack-native drafts (`message draft list|create|update|delete`) manage drafts that appear in the user's Slack client; `create` posts nothing. `create` and `update` accept repeatable `--attach <path>`; on `update` the files are added to the draft's existing attachments rather than replacing them. They use undocumented session endpoints and require browser-style auth (xoxc/xoxd).
+Slack-native drafts (`message draft list|create|update|delete`) manage drafts in the user's Slack client; `create` fills the target's message input without posting. `create` and `update` accept repeatable `--attach <path>`; on `update` the files are added to the draft's existing attachments rather than replacing them. They use undocumented session endpoints and require browser-style auth (xoxc/xoxd).
 
 `canvas edit` uses Slack's public `canvases.edit` API and applies exactly one operation per call. The
 default `replace` operation replaces the whole canvas; section-targeted inserts/replacements and

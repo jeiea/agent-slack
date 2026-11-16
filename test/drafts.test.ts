@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   createDraft,
   deleteDraft,
@@ -9,7 +9,7 @@ import {
   parseDraftRecord,
   updateDraft,
 } from "../src/slack/drafts.ts";
-import type { SlackApiClient } from "../src/slack/client.ts";
+import { SlackApiClient } from "../src/slack/client.ts";
 
 function createClient(responses: Record<string, Record<string, unknown>>) {
   const calls: { method: string; params: Record<string, unknown> }[] = [];
@@ -117,7 +117,7 @@ describe("listDrafts", () => {
 });
 
 describe("createDraft", () => {
-  test("sends blocks, destination, and composer flag", async () => {
+  test("creates a reply draft for the requested thread", async () => {
     const { client, calls } = createClient({
       "drafts.create": { ok: true, draft: rawDraft },
     });
@@ -142,9 +142,34 @@ describe("createDraft", () => {
       },
     ]);
     expect(params.file_ids).toEqual([]);
-    expect(params.is_from_composer).toBe(true);
     expect(typeof params.client_msg_id).toBe("string");
     expect(draft?.id).toBe("Dr123");
+  });
+
+  test("keeps a thread reply draft in the thread input", async () => {
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ ok: true, draft: rawDraft }),
+    );
+    try {
+      const client = new SlackApiClient(
+        { auth_type: "browser", xoxc_token: "xoxc-test", xoxd_cookie: "xoxd-test" },
+        { workspaceUrl: "https://workspace.slack.com" },
+      );
+
+      await createDraft(client, {
+        channelId: "D123",
+        threadTs: "1699.000100",
+        text: "hello",
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, request] = fetchMock.mock.calls[0]!;
+      expect(url).toBe("https://workspace.slack.com/api/drafts.create");
+      const body = new URLSearchParams(String(request?.body));
+      expect(body.get("is_from_composer")).toBe("false");
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   test("omits thread fields for channel drafts", async () => {
@@ -153,6 +178,7 @@ describe("createDraft", () => {
     await createDraft(client, { channelId: "C123", text: "hello" });
 
     expect(calls[0]?.params.destinations).toEqual([{ channel_id: "C123" }]);
+    expect(calls[0]?.params.is_from_composer).toBe(false);
   });
 
   test("includes file_ids on the wire when fileIds is supplied", async () => {
