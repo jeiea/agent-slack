@@ -23,6 +23,15 @@ OR npm global install (requires Node >= 22.5):
 npm i -g agent-slack
 ```
 
+OR install this fork from git with pnpm (builds on install, so Bun is needed then; the installed CLI runs on Node):
+
+```bash
+# --allow-build approves the fork's build script for any commit of this repository
+mise x bun@latest -- pnpm add -g --allow-build=agent-slack@git+https://github.com/jeiea/agent-slack.git github:jeiea/agent-slack#git-install
+```
+
+Re-run the same command to update; `agent-slack update` installs the npm release instead.
+
 OR run via Nix flake:
 
 ```bash

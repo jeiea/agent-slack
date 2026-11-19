@@ -25,7 +25,7 @@
     "build": "bun build src/index.ts --outdir dist --target=bun --sourcemap",
     "build:npm": "bun build src/index.ts --outdir dist --target=node --packages=external --external bun:sqlite --external node:sqlite --sourcemap",
     "dev": "bun run src/index.ts",
-    "prepare": "simple-git-hooks",
+    "prepare": "simple-git-hooks && bun run build:npm",
     "prepublishOnly": "bun run build:npm",
     "build:release": "sh ./scripts/build-release-assets.sh",
     "release": "sh ./scripts/release.sh",
